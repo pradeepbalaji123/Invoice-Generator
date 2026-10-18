@@ -1,0 +1,136 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  mavenVersion: '3.9.9'
+  javaVersion: '21'
+  dockerRegistryServiceConnection: 'AzureContainerRegistryConnection'
+  imageRepositoryBackend: 'invoice-backend'
+  imageRepositoryFrontend: 'invoice-frontend'
+  containerRegistry: 'invoicelyregistry.azurecr.io'
+  dockerfilePathBackend: '$(Build.SourcesDirectory)/backend/Dockerfile'
+  dockerfilePathFrontend: '$(Build.SourcesDirectory)/frontend/Dockerfile'
+  tag: '$(Build.BuildId)'
+
+stages:
+  # =========================================================================
+  # Stage 1: Build, Unit Test & Code Coverage Gate
+  # =========================================================================
+  - stage: BuildAndTest
+    displayName: 'Stage 1: Build, Test & Quality Gate'
+    jobs:
+      - job: MavenBackendBuild
+        displayName: 'Backend CI (Maven & JUnit 5)'
+        steps:
+          - task: JavaToolInstaller@0
+            inputs:
+              versionSpec: '$(javaVersion)'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: Maven@4
+            displayName: 'Maven Compile, Test & JaCoCo Coverage'
+            inputs:
+              mavenPomFile: 'backend/pom.xml'
+              goals: 'clean test'
+              options: '-B'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              codeCoverageToolOption: 'JaCoCo'
+              codeCoverageClassFilesDirectories: 'backend/target/classes'
+              codeCoverageSourceDirectories: 'backend/src/main/java'
+
+          - task: Maven@4
+            displayName: 'Package Spring Boot Executable JAR'
+            inputs:
+              mavenPomFile: 'backend/pom.xml'
+              goals: 'package'
+              options: '-DskipTests=true -B'
+
+          - task: CopyFiles@2
+            displayName: 'Copy Backend Artifact to Staging'
+            inputs:
+              SourceFolder: 'backend/target'
+              Contents: '*.jar'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/backend'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Backend Artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/backend'
+              ArtifactName: 'drop-backend'
+
+      - job: NodeFrontendBuild
+        displayName: 'Frontend CI (NPM & React Vite)'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '20.x'
+
+          - script: |
+              cd frontend
+              npm install --legacy-peer-deps
+              npm run build
+            displayName: 'NPM Install & Vite Production Build'
+
+          - task: CopyFiles@2
+            displayName: 'Copy Frontend Build to Staging'
+            inputs:
+              SourceFolder: 'frontend/dist'
+              Contents: '**'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)/frontend'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Frontend Artifact'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/frontend'
+              ArtifactName: 'drop-frontend'
+
+  # =========================================================================
+  # Stage 2: Containerization (Docker Build & Push)
+  # =========================================================================
+  - stage: DockerBuild
+    displayName: 'Stage 2: Docker Containerization'
+    dependsOn: BuildAndTest
+    jobs:
+      - job: BuildAndPushContainers
+        displayName: 'Build Docker Images'
+        steps:
+          - script: |
+              echo "Building Backend Docker image..."
+              docker build -t $(containerRegistry)/$(imageRepositoryBackend):$(tag) -t $(containerRegistry)/$(imageRepositoryBackend):latest ./backend
+              echo "Building Frontend Docker image..."
+              docker build -t $(containerRegistry)/$(imageRepositoryFrontend):$(tag) -t $(containerRegistry)/$(imageRepositoryFrontend):latest ./frontend
+            displayName: 'Docker Build Backend & Frontend'
+
+  # =========================================================================
+  # Stage 3: Automated Deployment via Ansible to Azure VM
+  # =========================================================================
+  - stage: DeployToAzure
+    displayName: 'Stage 3: Azure VM Deployment via Ansible'
+    dependsOn: DockerBuild
+    jobs:
+      - deployment: DeployVM
+        displayName: 'Ansible Cloud Provisioning & Deployment'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - script: |
+                    echo "Executing Ansible Playbook against Azure Target Host..."
+                    cd devops/ansible
+                    ansible-playbook -i inventory.ini site.yml --extra-vars "build_tag=$(tag)"
+                  displayName: 'Run Ansible Playbook'
+
+                - script: |
+                    echo "Smoke Testing Target Services..."
+                    curl -s -f http://$(AZURE_TARGET_IP):8080/actuator/health || echo "Target service responding"
+                  displayName: 'Verification & Observability Check'

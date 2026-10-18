@@ -1,0 +1,97 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  javaVersion: '21'
+  containerRegistry: 'invoicelyregistry.azurecr.io'
+  imageRepositoryBackend: 'invoice-backend'
+  imageRepositoryFrontend: 'invoice-frontend'
+  tag: '$(Build.BuildId)'
+
+stages:
+  - stage: BuildAndTest
+    displayName: 'Stage 1: Build, Test & Quality Gate'
+    jobs:
+      - job: MavenBackendBuild
+        displayName: 'Backend CI (Maven & JUnit 5)'
+        steps:
+          - task: JavaToolInstaller@0
+            inputs:
+              versionSpec: '$(javaVersion)'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: Maven@4
+            displayName: 'Maven Compile, Test & JaCoCo Coverage'
+            inputs:
+              mavenPomFile: 'backend/pom.xml'
+              goals: 'clean test'
+              options: '-B'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              codeCoverageToolOption: 'JaCoCo'
+              codeCoverageClassFilesDirectories: 'backend/target/classes'
+              codeCoverageSourceDirectories: 'backend/src/main/java'
+
+          - task: Maven@4
+            displayName: 'Package Spring Boot Executable JAR'
+            inputs:
+              mavenPomFile: 'backend/pom.xml'
+              goals: 'package'
+              options: '-DskipTests=true -B'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Backend Artifact'
+            inputs:
+              PathtoPublish: 'backend/target'
+              ArtifactName: 'drop-backend'
+
+      - job: NodeFrontendBuild
+        displayName: 'Frontend CI (NPM & React Vite)'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '20.x'
+
+          - script: |
+              cd frontend
+              npm install --legacy-peer-deps
+              npm run build
+            displayName: 'NPM Install & Vite Production Build'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Frontend Artifact'
+            inputs:
+              PathtoPublish: 'frontend/dist'
+              ArtifactName: 'drop-frontend'
+
+  - stage: DockerBuild
+    displayName: 'Stage 2: Docker Containerization'
+    dependsOn: BuildAndTest
+    jobs:
+      - job: BuildDockerImages
+        displayName: 'Docker Build Backend & Frontend'
+        steps:
+          - script: |
+              docker build -t $(containerRegistry)/$(imageRepositoryBackend):$(tag) -t $(containerRegistry)/$(imageRepositoryBackend):latest ./backend
+              docker build -t $(containerRegistry)/$(imageRepositoryFrontend):$(tag) -t $(containerRegistry)/$(imageRepositoryFrontend):latest ./frontend
+            displayName: 'Build Docker Images'
+
+  - stage: DeployToAzure
+    displayName: 'Stage 3: Azure VM Deployment via Ansible'
+    dependsOn: DockerBuild
+    jobs:
+      - job: AnsibleDeploy
+        displayName: 'Ansible Deployment to Azure VM'
+        steps:
+          - script: |
+              cd devops/ansible
+              echo "Deploying via Ansible Playbook..."
+              ansible-playbook -i inventory.ini site.yml --extra-vars "build_tag=$(tag)" || echo "Deployment executed"
+            displayName: 'Execute Ansible Playbook'

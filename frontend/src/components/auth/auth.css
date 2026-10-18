@@ -1,0 +1,134 @@
+/* Color Variables - Easy theming */
+:root {
+    --primary-light: #667eea;
+    --primary-dark: #764ba2;
+    --text-dark: #2d3748;
+    --text-medium: #4a5568;
+    --border-light: #e2e8f0;
+    --error-light: #fff5f5;
+    --error-dark: #e53e3e;
+    --shadow-focus: rgba(102, 126, 234, 0.2);
+  }
+  
+  /* Base Styles */
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background-color: #f8fafc;
+  }
+  
+  .auth-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 2.5rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  }
+  
+  .auth-title {
+    font-size: 1.75rem;
+    color: var(--text-dark);
+    margin-bottom: 2rem;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  
+  /* Form Elements */
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-medium);
+    font-size: 0.9375rem;
+  }
+  
+  .form-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px var(--shadow-focus);
+  }
+  
+  /* Buttons & Links */
+  .auth-button {
+    width: 100%;
+    padding: 0.75rem;
+    background: linear-gradient(90deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .auth-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+  }
+  
+  .auth-button:active {
+    transform: translateY(0);
+  }
+  
+  .auth-link {
+    color: var(--primary-light);
+    text-decoration: none;
+    font-weight: 500;
+    display: block;
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.9375rem;
+    transition: all 0.2s;
+  }
+  
+  .auth-link:hover {
+    text-decoration: underline;
+    color: var(--primary-dark);
+  }
+  
+  /* Error Handling */
+  .error-message {
+    color: var(--error-dark);
+    background-color: var(--error-light);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .error-message::before {
+    content: "!";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background-color: var(--error-dark);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: bold;
+  }

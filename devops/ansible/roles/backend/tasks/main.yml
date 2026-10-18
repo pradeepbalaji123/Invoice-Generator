@@ -1,0 +1,60 @@
+---
+- name: Ensure backend directory exists
+  file:
+    path: "{{ app_dir }}/backend"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Deploy Spring Boot application executable JAR
+  copy:
+    src: "{{ playbook_dir }}/../../backend/target/invoice-backend-1.0.0-SNAPSHOT.jar"
+    dest: "{{ app_dir }}/backend/app.jar"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Create systemd environment file for backend
+  copy:
+    dest: "/etc/invoice-backend.env"
+    content: |
+      SPRING_PROFILES_ACTIVE=postgres
+      DB_HOST=localhost
+      DB_PORT=5432
+      DB_NAME={{ db_name }}
+      DB_USER={{ db_user }}
+      DB_PASSWORD={{ db_password }}
+      JWT_SECRET={{ jwt_secret }}
+      PORT={{ backend_port }}
+    mode: '0600'
+
+- name: Create systemd unit service for Spring Boot Backend
+  copy:
+    dest: "/etc/systemd/system/invoice-backend.service"
+    content: |
+      [Unit]
+      Description=Invoice Pro Spring Boot Backend Service
+      After=syslog.target network.target postgresql.service
+
+      [Service]
+      User={{ ansible_user }}
+      EnvironmentFile=/etc/invoice-backend.env
+      ExecStart=/usr/bin/java -XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -jar {{ app_dir }}/backend/app.jar
+      SuccessExitStatus=143
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Enable and restart invoice-backend service
+  systemd:
+    name: invoice-backend
+    state: restarted
+    enabled: yes

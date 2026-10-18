@@ -1,0 +1,19 @@
+---
+- name: "Provision and Deploy Invoice Pro on Azure VM"
+  hosts: azure_servers
+  become: yes
+  vars:
+    app_root: "/opt/invoice-pro"
+
+  roles:
+    - role: common
+      tags: ['common', 'prereq']
+
+    - role: postgres
+      tags: ['postgres', 'database']
+
+    - role: backend
+      tags: ['backend', 'spring']
+
+    - role: frontend
+      tags: ['frontend', 'react', 'nginx']

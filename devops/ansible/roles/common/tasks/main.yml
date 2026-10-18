@@ -1,0 +1,41 @@
+---
+- name: Update apt cache and upgrade packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+    cache_valid_time: 3600
+
+- name: Install required core utilities
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - ufw
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3-pip
+      - openjdk-21-jre-headless
+    state: present
+
+- name: Create application deployment directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Configure UFW firewall rules
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - '22'    # SSH
+    - '80'    # HTTP Frontend / Nginx
+    - '8080'  # Spring Boot Backend API
+    - '9090'  # Prometheus Observability
+    - '3001'  # Grafana Dashboard
